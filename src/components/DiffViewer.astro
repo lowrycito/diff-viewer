@@ -156,7 +156,7 @@ const { selectedCommit, owner, repo } = Astro.props;
           debugLog("Falling back to API endpoint...");
           updateLoadingProgress(1.5); // Show progress that we're trying alternative method
           
-          const apiUrl = `/api/diff?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}`;
+          const apiUrl = `/diff-viewer/api/diff?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}`;
           debugLog(`API URL: ${apiUrl}`);
           
           const response = await fetch(apiUrl);

@@ -239,6 +239,11 @@ function getAuthorDate(commit: Commit): string | null {
         // Update URL with selected commit
         const url = new URL(window.location.href);
         url.searchParams.set('sha', sha);
+        // Make sure we maintain the /diff-viewer/ base path
+        const pathname = url.pathname.endsWith('/') ? url.pathname : url.pathname + '/';
+        if (!pathname.includes('/diff-viewer/')) {
+          url.pathname = '/diff-viewer' + pathname;
+        }
         window.history.pushState({}, '', url);
         debugLog(`URL updated: ${url.toString()}`);
         

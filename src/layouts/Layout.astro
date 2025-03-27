@@ -14,14 +14,14 @@ const { title, owner, repo } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
-    <link rel="stylesheet" href="/styles/global.css" />
-    <link rel="stylesheet" href="/styles/vendor/diff2html.css" />
-    <link rel="stylesheet" href="/styles/vendor/simple-diff.css" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/diff-viewer/styles/global.css" />
+    <link rel="stylesheet" href="/diff-viewer/styles/vendor/diff2html.css" />
+    <link rel="stylesheet" href="/diff-viewer/styles/vendor/simple-diff.css" />
+    <link rel="icon" type="image/svg+xml" href="/diff-viewer/favicon.svg" />
     <!-- Load diff2html directly -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/diff2html/3.4.51/diff2html.min.js" is:inline></script>
     <!-- Load our simple diff renderer as fallback -->
-    <script src="/scripts/vendor/simple-diff.js" is:inline></script>
+    <script src="/diff-viewer/scripts/vendor/simple-diff.js" is:inline></script>
   </head>
   <body>
     <header>
@@ -137,7 +137,7 @@ const { title, owner, repo } = Astro.props;
             newParams.set('sha', currentSHA);
           }
           
-          window.location.href = `/?${newParams.toString()}`;
+          window.location.href = `/diff-viewer/?${newParams.toString()}`;
         }
       });
       
