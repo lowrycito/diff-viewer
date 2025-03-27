@@ -1,0 +1,371 @@
+:root {
+  --primary-color: #3498db;
+  --secondary-color: #2c3e50;
+  --background-color: #f8f9fa;
+  --text-color: #333;
+  --border-color: #ddd;
+  --sidebar-width: 350px;
+  --header-height: 70px;
+  --sidebar-collapsed-width: 50px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  width: 100%;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  background-color: white;
+  padding: 1rem;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+  padding: 0;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  height: 100%;
+  transition: margin-left 0.3s ease;
+  width: calc(100% - var(--sidebar-width));
+  margin-left: 0;
+}
+
+.sidebar.collapsed + .main-content {
+  width: calc(100% - var(--sidebar-collapsed-width));
+}
+
+.toggle-sidebar {
+  position: absolute;
+  top: 50%;
+  right: -13px;
+  width: 26px;
+  height: 60px;
+  background-color: var(--secondary-color);
+  color: white;
+  border: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  z-index: 10;
+  transition: transform 0.3s ease;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-sidebar:hover {
+  background-color: #3a5269;
+}
+
+.toggle-sidebar .arrow {
+  font-size: 14px;
+}
+
+.toggle-sidebar.collapsed .arrow {
+  transform: rotate(180deg);
+}
+
+.commit-list {
+  list-style: none;
+}
+
+.commit-item {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.commit-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.commit-item.active {
+  background-color: rgba(52, 152, 219, 0.1);
+  border-left: 3px solid var(--primary-color);
+}
+
+.commit-hash {
+  font-family: monospace;
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.commit-author {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.commit-date {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.diff-view {
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Customize diff2html styles */
+.d2h-file-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+  padding: 10px 15px;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.d2h-file-name {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.d2h-file-wrapper {
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Improved diff styles for better readability */
+.d2h-code-line {
+  padding: 0 8px;
+}
+
+.d2h-code-side-line {
+  padding: 0 5px;
+}
+
+.d2h-code-linenumber,
+.d2h-code-side-linenumber {
+  box-shadow: none;
+  border-width: 0 1px 0 0;
+}
+
+.d2h-del {
+  background-color: #ffeef0;
+}
+
+.d2h-ins {
+  background-color: #e6ffed;
+}
+
+.d2h-code-line del {
+  background-color: #ffb6ba;
+  border-radius: 0.2em;
+}
+
+.d2h-code-line ins {
+  background-color: #97f295;
+  border-radius: 0.2em;
+}
+
+/* Improve diff container layout */
+.diff-view {
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Make file list more compact and styled */
+.d2h-file-list {
+  margin-bottom: 20px;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 0;
+}
+
+.d2h-file-list-header {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eee;
+  background-color: #f8f9fa;
+}
+
+.d2h-file-list-title {
+  margin: 0;
+}
+
+.d2h-file-list > li {
+  padding: 10px 15px;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
+}
+
+.d2h-file-list > li:hover {
+  background-color: #f8f9fa;
+}
+
+.d2h-file-list > li:last-child {
+  border-bottom: none;
+}
+
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2rem;
+  color: #888;
+}
+
+.select-commit {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  color: #888;
+  font-size: 1.2rem;
+}
+
+@media (max-width: 768px) {
+  main {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 35vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .main-content {
+    width: 100%;
+    margin-left: 0;
+  }
+  
+  .sidebar.collapsed + .main-content {
+    width: 100%;
+  }
+  
+  .commit-message {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .commit-item {
+    padding: 0.5rem;
+  }
+  
+  .repo-selector form {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .d2h-file-side-diff {
+    width: 100%;
+    display: block;
+  }
+  
+  /* Stack the side-by-side view vertically on mobile */
+  .d2h-files-diff {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Make the diff tables full width on mobile */
+  .d2h-file-side-diff {
+    width: 100%;
+    margin-right: 0;
+    overflow-x: auto;
+  }
+  
+  /* Add some spacing between the left and right diff panels */
+  .d2h-file-side-diff:first-child {
+    margin-bottom: 20px;
+  }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+  :root {
+    --sidebar-width: 100%;
+    --header-height: 130px;
+  }
+  
+  header h1 {
+    font-size: 1.2rem;
+  }
+  
+  .repo-input-group {
+    flex-direction: row;
+    width: 100%;
+  }
+  
+  #repo-owner, #repo-name {
+    min-width: 80px;
+    flex: 1;
+  }
+  
+  .loading-indicator {
+    height: 200px;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .loading-text {
+    font-size: 1rem;
+  }
+  
+  .commit-author, .commit-date, .commit-hash {
+    font-size: 0.75rem;
+  }
+  
+  /* Further reduce spacing to maximize screen real estate */
+  .main-content, .sidebar {
+    padding: 0.5rem;
+  }
+  
+  /* Reduce error message size on small screens */
+  .error {
+    padding: 1rem;
+    margin: 1rem;
+  }
+}

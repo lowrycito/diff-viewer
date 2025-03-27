@@ -1,0 +1,135 @@
+/**
+ * Simple Diff CSS
+ * Styling for the simple diff renderer
+ */
+
+.sd-container {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+.sd-file-list {
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.sd-file-list h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.sd-file-list ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sd-file-list li {
+  padding: 5px 0;
+}
+
+.sd-file-list a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.sd-file-list a:hover {
+  text-decoration: underline;
+}
+
+.sd-file {
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sd-file-header {
+  background-color: #f1f8ff;
+  border-bottom: 1px solid #ddd;
+  padding: 10px 15px;
+  font-weight: bold;
+  font-family: monospace;
+}
+
+.sd-file-content {
+  overflow-x: auto;
+}
+
+.sd-diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  tab-size: 4;
+}
+
+.sd-diff-table td {
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.sd-line-content {
+  width: 100%;
+}
+
+.sd-addition {
+  background-color: #e6ffed;
+}
+
+.sd-addition td:first-child {
+  background-color: #cdffd8;
+  width: 40px;
+  text-align: center;
+  color: #28a745;
+}
+
+.sd-addition .sd-line-content {
+  border-left: 1px solid #cdffd8;
+}
+
+.sd-deletion {
+  background-color: #ffeef0;
+}
+
+.sd-deletion td:first-child {
+  background-color: #ffdce0;
+  width: 40px;
+  text-align: center;
+  color: #d73a49;
+}
+
+.sd-deletion .sd-line-content {
+  border-left: 1px solid #ffdce0;
+}
+
+.sd-unchanged {
+  background-color: #fafbfc;
+}
+
+.sd-unchanged td:first-child {
+  width: 40px;
+  text-align: center;
+  color: #999;
+}
+
+.sd-chunk-header {
+  background-color: #f1f8ff;
+  color: #586069;
+  text-align: center;
+}
+
+.sd-empty {
+  padding: 50px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}

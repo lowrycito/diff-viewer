@@ -1,0 +1,439 @@
+---
+interface Props {
+  title: string;
+  owner?: string;
+  repo?: string;
+}
+
+const { title, owner, repo } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="stylesheet" href="/styles/global.css" />
+    <link rel="stylesheet" href="/styles/vendor/diff2html.css" />
+    <link rel="stylesheet" href="/styles/vendor/simple-diff.css" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Load diff2html directly -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff2html/3.4.51/diff2html.min.js" is:inline></script>
+    <!-- Load our simple diff renderer as fallback -->
+    <script src="/scripts/vendor/simple-diff.js" is:inline></script>
+  </head>
+  <body>
+    <header>
+      <h1>Diff Viewer</h1>
+      
+      {owner && repo && (
+        <form id="repo-form" class="header-repo-form">
+          <div class="repo-input-group">
+            <input 
+              type="text" 
+              id="repo-owner" 
+              name="owner" 
+              value={owner} 
+              placeholder="e.g., withastro" 
+              required
+              aria-label="Repository Owner"
+            />
+            <span class="repo-separator">/</span>
+            <input 
+              type="text" 
+              id="repo-name" 
+              name="repo" 
+              value={repo} 
+              placeholder="e.g., astro" 
+              required
+              aria-label="Repository Name"
+            />
+          </div>
+          <button type="submit" class="header-button">Load</button>
+        </form>
+      )}
+      
+      <div class="header-controls">
+        <button id="shortcuts-toggle" class="header-button shortcuts-button" aria-label="Keyboard shortcuts">
+          <span class="shortcuts-icon">⌨️</span>
+        </button>
+        <button id="debug-toggle" class="header-button debug-button">Debug</button>
+      </div>
+      
+      <div id="shortcuts-modal" class="shortcuts-modal">
+        <div class="shortcuts-content">
+          <h2>Keyboard Shortcuts</h2>
+          <div class="shortcuts-close">×</div>
+          <div class="shortcuts-list">
+            <div class="shortcut-group">
+              <h3>Navigation</h3>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>↑</kbd> / <kbd>↓</kbd></div>
+                <div class="shortcut-desc">Navigate through commits</div>
+              </div>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>F</kbd></div>
+                <div class="shortcut-desc">Focus search box</div>
+              </div>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>Esc</kbd></div>
+                <div class="shortcut-desc">Clear search</div>
+              </div>
+            </div>
+            <div class="shortcut-group">
+              <h3>Layout & View</h3>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>S</kbd></div>
+                <div class="shortcut-desc">Toggle sidebar</div>
+              </div>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>?</kbd></div>
+                <div class="shortcut-desc">Show keyboard shortcuts</div>
+              </div>
+              <div class="shortcut-item">
+                <div class="shortcut-keys"><kbd>D</kbd></div>
+                <div class="shortcut-desc">Toggle debug information</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    
+    <script is:inline>
+      // Ensure diff2html is globally available
+      window.Diff2Html = window.Diff2Html || window.SimpleDiff || { 
+        html: function(diffText) { 
+          return `<pre>${diffText}</pre>`; 
+        } 
+      };
+
+      // Handle repository form submission
+      document.getElementById('repo-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const form = e.target;
+        const formData = new FormData(form);
+        
+        const owner = formData.get('owner')?.toString() || '';
+        const repo = formData.get('repo')?.toString() || '';
+        
+        if (owner && repo) {
+          // Get current SHA if exists
+          const currentParams = new URLSearchParams(window.location.search);
+          const currentSHA = currentParams.get('sha');
+          
+          // Build new URL
+          const newParams = new URLSearchParams();
+          newParams.set('owner', owner);
+          newParams.set('repo', repo);
+          
+          // Preserve the commit SHA if available
+          if (currentSHA) {
+            newParams.set('sha', currentSHA);
+          }
+          
+          window.location.href = `/?${newParams.toString()}`;
+        }
+      });
+      
+      // Add event listener for the debug button
+      document.getElementById('debug-toggle').addEventListener('click', () => {
+        // Show all debug divs
+        document.querySelectorAll('.debug-info').forEach(el => {
+          el.style.display = el.style.display === 'block' ? 'none' : 'block';
+        });
+      });
+      
+      // Shortcuts modal functionality
+      const shortcutsToggle = document.getElementById('shortcuts-toggle');
+      const shortcutsModal = document.getElementById('shortcuts-modal');
+      const shortcutsClose = document.querySelector('.shortcuts-close');
+      
+      if (shortcutsToggle && shortcutsModal) {
+        // Open modal with button
+        shortcutsToggle.addEventListener('click', () => {
+          shortcutsModal.classList.add('active');
+        });
+        
+        // Close with × button
+        shortcutsClose?.addEventListener('click', () => {
+          shortcutsModal.classList.remove('active');
+        });
+        
+        // Close when clicking outside
+        shortcutsModal.addEventListener('click', (e) => {
+          if (e.target === shortcutsModal) {
+            shortcutsModal.classList.remove('active');
+          }
+        });
+        
+        // Close with Escape key
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && shortcutsModal.classList.contains('active')) {
+            shortcutsModal.classList.remove('active');
+          }
+          
+          // Toggle modal with ? key
+          if (e.key === '?' && !shortcutsModal.classList.contains('active')) {
+            shortcutsModal.classList.add('active');
+            e.preventDefault();
+          }
+          
+          // Toggle debug with D key
+          if (e.key === 'd' && e.target.tagName !== 'INPUT') {
+            document.getElementById('debug-toggle')?.click();
+          }
+          
+          // Focus search with / or Ctrl+F
+          if ((e.key === '/' || (e.ctrlKey && e.key === 'f')) && 
+              e.target.tagName !== 'INPUT' && 
+              !shortcutsModal.classList.contains('active')) {
+            const searchInput = document.getElementById('commit-search');
+            if (searchInput) {
+              searchInput.focus();
+              e.preventDefault();
+            }
+          }
+        });
+      }
+      
+      // Log the availability of diff libraries
+      console.log("Diff2Html available:", typeof window.Diff2Html !== 'undefined');
+      console.log("SimpleDiff available:", typeof window.SimpleDiff !== 'undefined');
+    </script>
+  </body>
+</html>
+
+<style>
+  header {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 0.7rem 1rem;
+    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    white-space: nowrap;
+  }
+
+  .header-repo-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    justify-content: center;
+    min-width: 200px;
+  }
+
+  .repo-input-group {
+    display: flex;
+    align-items: center;
+    background-color: white;
+    border-radius: 4px;
+    padding: 0 0.2rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .repo-separator {
+    color: #666;
+    font-weight: bold;
+    margin: 0 2px;
+  }
+
+  #repo-owner, #repo-name {
+    border: none;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8rem;
+    width: auto;
+    min-width: 100px;
+    background: transparent;
+  }
+
+  #repo-owner:focus, #repo-name:focus {
+    outline: none;
+  }
+
+  .header-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .header-button {
+    padding: 0.25rem 0.5rem;
+    background-color: #444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.2s;
+  }
+
+  .header-button:hover {
+    background-color: #555;
+  }
+  
+  .shortcuts-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .shortcuts-icon {
+    font-size: 1rem;
+  }
+  
+  /* Shortcuts modal */
+  .shortcuts-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+  }
+  
+  .shortcuts-modal.active {
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .shortcuts-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    padding: 2rem;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+  }
+  
+  .shortcuts-close {
+    position: absolute;
+    top: 1rem;
+    right: 1.5rem;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s;
+  }
+  
+  .shortcuts-close:hover {
+    color: var(--primary-color);
+  }
+  
+  .shortcuts-list {
+    margin-top: 1.5rem;
+  }
+  
+  .shortcut-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .shortcut-group h3 {
+    margin-bottom: 0.8rem;
+    color: var(--secondary-color);
+    font-size: 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+  }
+  
+  .shortcut-keys {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #666;
+  }
+  
+  .shortcut-keys kbd {
+    display: inline-block;
+    padding: 0.2rem 0.4rem;
+    font-family: monospace;
+    font-size: 0.9rem;
+    line-height: 1;
+    color: #444;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  }
+
+  main {
+    display: flex;
+    height: calc(100vh - var(--header-height));
+    width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    header {
+      flex-direction: column;
+      padding: 0.5rem;
+      gap: 0.5rem;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      margin-bottom: 0.3rem;
+    }
+    
+    .header-repo-form {
+      width: 100%;
+      order: 2;
+    }
+    
+    .header-controls {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+    }
+    
+    .header-button {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.4rem;
+    }
+    
+    .shortcuts-content {
+      padding: 1.5rem;
+      width: 95%;
+    }
+    
+    .shortcut-item {
+      flex-direction: column;
+      padding: 0.8rem 0;
+    }
+    
+    .shortcut-keys {
+      margin-bottom: 0.4rem;
+    }
+  }
+</style>

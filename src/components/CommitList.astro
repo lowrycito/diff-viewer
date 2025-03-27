@@ -1,0 +1,337 @@
+---
+import type { Commit } from '../utils/github';
+
+interface Props {
+  commits: Commit[];
+  selectedCommit: string | null;
+}
+
+const { commits, selectedCommit } = Astro.props;
+
+// Helper function to get commit message
+function getCommitMessage(commit: Commit): string {
+  if (commit.message) {
+    return commit.message;
+  } else if (commit.commit?.message) {
+    return commit.commit.message;
+  }
+  return 'No message';
+}
+
+// Helper function to get author name
+function getAuthorName(commit: Commit): string {
+  if (commit.author?.name) {
+    return commit.author.name;
+  } else if (commit.commit?.author?.name) {
+    return commit.commit.author.name;
+  }
+  return 'Unknown';
+}
+
+// Helper function to get author date
+function getAuthorDate(commit: Commit): string | null {
+  if (commit.author?.date) {
+    return commit.author.date;
+  } else if (commit.commit?.author?.date) {
+    return commit.commit.author.date;
+  }
+  return null;
+}
+---
+
+<div id="sidebar" class="sidebar">
+  <button id="toggle-sidebar" class="toggle-sidebar" aria-label="Toggle sidebar">
+    <span class="arrow">◀</span>
+  </button>
+  
+  <div class="sidebar-content">
+    <h2>Commits</h2>
+    
+    <div class="commit-filter">
+      <input 
+        type="text" 
+        id="commit-search" 
+        placeholder="Search commits..."
+        class="commit-search"
+      />
+    </div>
+    
+    <div id="commit-list-debug" class="debug-info"></div>
+    
+    {commits.length === 0 ? (
+      <div class="no-commits">No commits found</div>
+    ) : (
+      <>
+        <div class="commit-stats">
+          <span id="commit-count">{commits.length}</span> commits found
+        </div>
+        <ul class="commit-list" id="commit-list">
+          {commits.map((commit) => (
+            <li 
+              class={`commit-item ${selectedCommit === commit.sha ? 'active' : ''}`}
+              data-sha={commit.sha}
+              data-message={getCommitMessage(commit).toLowerCase()}
+              data-author={getAuthorName(commit).toLowerCase()}
+            >
+              <div class="commit-message">{getCommitMessage(commit).split('\n')[0]}</div>
+              <div class="commit-hash">{commit.sha.substring(0, 7)}</div>
+              <div class="commit-author">
+                {getAuthorName(commit)}
+              </div>
+              <div class="commit-date">
+                {getAuthorDate(commit)
+                  ? new Date(getAuthorDate(commit)!).toLocaleDateString() 
+                  : 'Unknown date'}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+  </div>
+</div>
+
+<script>
+  // Debug helper
+  function debugLog(message) {
+    console.log(`[CommitList] ${message}`);
+    const debugElement = document.getElementById('commit-list-debug');
+    if (debugElement) {
+      debugElement.innerHTML += `<div>${new Date().toISOString()} - ${message}</div>`;
+    }
+  }
+
+  debugLog(`Found ${document.querySelectorAll('.commit-item').length} commit items`);
+
+  // Function to filter commits based on search query
+  function filterCommits(query) {
+    query = query.toLowerCase().trim();
+    debugLog(`Filtering commits with query: "${query}"`);
+    
+    const commitItems = document.querySelectorAll('.commit-item');
+    let visibleCount = 0;
+    
+    commitItems.forEach(item => {
+      const message = item.getAttribute('data-message') || '';
+      const author = item.getAttribute('data-author') || '';
+      const sha = item.getAttribute('data-sha') || '';
+      
+      if (query === '' || 
+          message.includes(query) || 
+          author.includes(query) || 
+          sha.includes(query)) {
+        item.style.display = '';
+        visibleCount++;
+      } else {
+        item.style.display = 'none';
+      }
+    });
+    
+    // Update the counter
+    const countElement = document.getElementById('commit-count');
+    if (countElement) {
+      countElement.textContent = visibleCount.toString();
+    }
+    
+    debugLog(`Filter results: ${visibleCount} commits match the query`);
+    return visibleCount;
+  }
+
+  // Add search functionality
+  const searchInput = document.getElementById('commit-search');
+  if (searchInput) {
+    // Add debounce to avoid too many filter operations
+    let debounceTimer;
+    
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const query = e.target.value;
+        filterCommits(query);
+      }, 300);
+    });
+    
+    // Add keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        filterCommits('');
+      }
+    });
+  }
+  
+  // Add sidebar collapse/expand functionality
+  const toggleButton = document.getElementById('toggle-sidebar');
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.querySelector('.main-content');
+  
+  if (toggleButton && sidebar) {
+    // Load saved state from localStorage (default to expanded)
+    const savedState = localStorage.getItem('sidebarCollapsed');
+    if (savedState === 'true') {
+      sidebar.classList.add('collapsed');
+      toggleButton.classList.add('collapsed');
+    }
+    
+    toggleButton.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      toggleButton.classList.toggle('collapsed');
+      
+      // Save the collapsed state
+      if (sidebar.classList.contains('collapsed')) {
+        localStorage.setItem('sidebarCollapsed', 'true');
+      } else {
+        localStorage.setItem('sidebarCollapsed', 'false');
+      }
+    });
+    
+    // Add keyboard shortcut for toggling sidebar (S key)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 's' && e.target.tagName !== 'INPUT') {
+        toggleButton.click();
+        e.preventDefault();
+      }
+    });
+  }
+
+  // Add keyboard navigation for commit list
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return; // Don't handle if user is typing in an input
+    
+    const activeItem = document.querySelector('.commit-item.active');
+    const visibleItems = Array.from(document.querySelectorAll('.commit-item'))
+      .filter(item => item.style.display !== 'none');
+    
+    if (!visibleItems.length) return;
+    
+    let nextItem;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!activeItem) {
+        nextItem = visibleItems[0];
+      } else {
+        const currentIndex = visibleItems.indexOf(activeItem);
+        nextItem = visibleItems[Math.min(currentIndex + 1, visibleItems.length - 1)];
+      }
+      nextItem.click();
+      nextItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!activeItem) {
+        nextItem = visibleItems[visibleItems.length - 1];
+      } else {
+        const currentIndex = visibleItems.indexOf(activeItem);
+        nextItem = visibleItems[Math.max(currentIndex - 1, 0)];
+      }
+      nextItem.click();
+      nextItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+
+  // Add click event listeners to commit items
+  document.querySelectorAll('.commit-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const sha = item.getAttribute('data-sha');
+      debugLog(`Commit clicked: ${sha}`);
+      
+      if (sha) {
+        // Update URL with selected commit
+        const url = new URL(window.location.href);
+        url.searchParams.set('sha', sha);
+        window.history.pushState({}, '', url);
+        debugLog(`URL updated: ${url.toString()}`);
+        
+        // Trigger event to load diff
+        debugLog(`Dispatching loadCommitDiff event with SHA: ${sha}`);
+        const event = new CustomEvent('loadCommitDiff', { detail: { sha } });
+        window.dispatchEvent(event);
+        
+        // Update active class
+        document.querySelectorAll('.commit-item').forEach(el => {
+          el.classList.remove('active');
+        });
+        item.classList.add('active');
+        debugLog('Updated active class');
+        
+        // Direct call as a fallback
+        debugLog('Attempting direct call to debugDiffViewer.forceLoad');
+        try {
+          if (window.debugDiffViewer && typeof window.debugDiffViewer.forceLoad === 'function') {
+            window.debugDiffViewer.forceLoad(sha);
+            debugLog('Direct call succeeded');
+          } else {
+            debugLog('debugDiffViewer not available for direct call');
+          }
+        } catch (e) {
+          debugLog(`Error in direct call: ${e.message}`);
+        }
+      }
+    });
+  });
+</script>
+
+<style>
+  .sidebar-content {
+    opacity: 1;
+    transition: opacity 0.2s;
+  }
+  
+  .sidebar.collapsed .sidebar-content {
+    opacity: 0;
+  }
+  
+  .no-commits {
+    padding: 1rem;
+    color: #888;
+    font-style: italic;
+    text-align: center;
+  }
+  
+  .commit-filter {
+    margin-bottom: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: white;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .commit-search {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  
+  .commit-search:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  }
+  
+  .commit-stats {
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    padding: 0 0.5rem;
+  }
+  
+  #commit-count {
+    font-weight: bold;
+  }
+  
+  .debug-info {
+    font-family: monospace;
+    font-size: 12px;
+    color: #666;
+    padding: 10px;
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+  }
+</style>

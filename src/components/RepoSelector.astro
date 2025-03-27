@@ -1,0 +1,126 @@
+---
+interface Props {
+  owner: string;
+  repo: string;
+}
+
+const { owner, repo } = Astro.props;
+---
+
+<div class="repo-selector">
+  <form id="repo-form">
+    <label for="repo-owner">Repository Owner:</label>
+    <input 
+      type="text" 
+      id="repo-owner" 
+      name="owner" 
+      value={owner} 
+      placeholder="e.g., withastro" 
+      required
+    />
+    
+    <label for="repo-name">Repository Name:</label>
+    <input 
+      type="text" 
+      id="repo-name" 
+      name="repo" 
+      value={repo} 
+      placeholder="e.g., astro" 
+      required
+    />
+    
+    <button type="submit">Load Repository</button>
+  </form>
+</div>
+
+<script>
+  // Handle form submission
+  document.getElementById('repo-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+    
+    const owner = formData.get('owner')?.toString() || '';
+    const repo = formData.get('repo')?.toString() || '';
+    
+    if (owner && repo) {
+      window.location.href = `/?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`;
+    }
+  });
+</script>
+
+<style>
+  .repo-selector {
+    padding: 1rem;
+    background-color: white;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  #repo-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  label {
+    font-weight: 600;
+    color: var(--secondary-color);
+    margin-right: 0.25rem;
+  }
+  
+  input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    width: 180px;
+    transition: all 0.2s;
+  }
+  
+  input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    outline: none;
+  }
+  
+  button {
+    padding: 0.5rem 1.5rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  
+  button:hover {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  @media (max-width: 768px) {
+    #repo-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    input {
+      width: 100%;
+    }
+  }
+</style>

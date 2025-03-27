@@ -1,0 +1,17 @@
+{
+  "name": "diff-viewer",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "astro": "^5.5.4",
+    "axios": "^1.8.4",
+    "diff2html": "^3.4.51"
+  }
+}

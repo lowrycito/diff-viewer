@@ -1,0 +1,1011 @@
+---
+interface Props {
+  selectedCommit: string | null;
+  owner: string;
+  repo: string;
+}
+
+const { selectedCommit, owner, repo } = Astro.props;
+---
+
+<div class="main-content" id="main-content">
+  <div class="diff-header">
+    {selectedCommit ? (
+      <h2 class="current-commit-info">
+        <span class="commit-sha">{selectedCommit.substring(0, 7)}</span>
+      </h2>
+    ) : (
+      <h2 class="no-commit-selected">No commit selected</h2>
+    )}
+    <div class="diff-options">
+      <button id="toggle-diff-mode" class="diff-option-button">
+        <span class="diff-option-icon">↔️</span>
+        <span class="diff-option-text">Toggle View</span>
+      </button>
+    </div>
+  </div>
+  
+  <div id="diff-container" class="diff-view">
+    {selectedCommit ? (
+      <div class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading diff...</div>
+        <div class="loading-progress" id="loading-progress"></div>
+      </div>
+    ) : (
+      <div class="select-commit">Select a commit to view diff</div>
+    )}
+  </div>
+  <div id="debug-info" class="debug-info"></div>
+</div>
+
+<script define:vars={{ selectedCommit, owner, repo }}>
+  // Debug helper
+  function debugLog(message) {
+    console.log(`[DiffViewer] ${message}`);
+    const debugElement = document.getElementById('debug-info');
+    if (debugElement) {
+      debugElement.innerHTML += `<div>${new Date().toISOString()} - ${message}</div>`;
+    }
+  }
+
+  // Progress indicator helper
+  function updateLoadingProgress(step, total = 4) {
+    const progressElement = document.getElementById('loading-progress');
+    if (progressElement) {
+      const percentage = Math.min(100, Math.round((step / total) * 100));
+      progressElement.textContent = `${percentage}%`;
+      progressElement.style.width = `${percentage}%`;
+      
+      if (percentage >= 100) {
+        setTimeout(() => {
+          progressElement.classList.add('complete');
+        }, 300);
+      }
+    }
+  }
+  
+  let currentSha = selectedCommit;
+  
+  debugLog(`Initial commit: ${currentSha || 'none'}, Owner: ${owner}, Repo: ${repo}`);
+  debugLog(`Diff2Html available: ${typeof window.Diff2Html !== 'undefined'}`);
+  debugLog(`SimpleDiff available: ${typeof window.SimpleDiff !== 'undefined'}`);
+
+  // Directly fetch diff from GitHub
+  async function fetchDirectGitHubDiff(owner, repo, sha) {
+    try {
+      debugLog(`Directly fetching diff from GitHub for ${owner}/${repo} commit ${sha}`);
+      const url = `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.files || data.files.length === 0) {
+        return '';
+      }
+      
+      debugLog(`Got ${data.files.length} files from GitHub API`);
+      
+      // Format the diff manually
+      let diffText = '';
+      for (const file of data.files) {
+        diffText += `diff --git a/${file.filename} b/${file.filename}\n`;
+        diffText += `index ${file.status === 'added' ? '0000000' : file.previous_filename || file.filename}..${file.sha ? file.sha.substring(0, 7) : '0000000'}\n`;
+        diffText += `--- a/${file.previous_filename || file.filename}\n`;
+        diffText += `+++ b/${file.filename}\n`;
+        if (file.patch) {
+          diffText += `${file.patch}\n`;
+        }
+      }
+      
+      return diffText;
+    } catch (error) {
+      debugLog(`Direct GitHub fetch error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // Function to fetch and render diff
+  async function fetchAndRenderDiff(sha) {
+    if (!sha) {
+      debugLog("No SHA provided to fetchAndRenderDiff");
+      return;
+    }
+    
+    debugLog(`Fetching diff for SHA: ${sha}`);
+    
+    const diffContainer = document.getElementById('diff-container');
+    if (!diffContainer) {
+      debugLog("Diff container not found in DOM");
+      return;
+    }
+    
+    diffContainer.innerHTML = `
+      <div class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading diff...</div>
+        <div class="loading-progress" id="loading-progress">0%</div>
+      </div>
+    `;
+    
+    try {
+      let diffText = '';
+      let errorMessage = '';
+      
+      // Indicate start of diff fetching
+      updateLoadingProgress(1);
+      
+      // Try multiple approaches to get the diff
+      try {
+        // 1. First try Github API directly (most reliable)
+        debugLog("Trying direct GitHub API first...");
+        try {
+          diffText = await fetchDirectGitHubDiff(owner, repo, sha);
+          debugLog(`Received diff text from GitHub API, length: ${diffText.length}`);
+          // Update progress for successful fetch
+          updateLoadingProgress(2);
+        } catch (githubError) {
+          debugLog(`GitHub API fetch error: ${githubError.message}`);
+          errorMessage = `GitHub API error: ${githubError.message}`;
+          
+          // 2. Try our API endpoint as fallback
+          debugLog("Falling back to API endpoint...");
+          updateLoadingProgress(1.5); // Show progress that we're trying alternative method
+          
+          const apiUrl = `/api/diff?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}`;
+          debugLog(`API URL: ${apiUrl}`);
+          
+          const response = await fetch(apiUrl);
+          debugLog(`API response status: ${response.status}`);
+          
+          if (response.ok) {
+            diffText = await response.text();
+            debugLog(`Received diff text from API, length: ${diffText.length}`);
+            errorMessage = ''; // Clear error if successful
+            updateLoadingProgress(2); // Update progress for successful fetch via fallback
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            errorMessage = `API error: ${response.statusText}. ${errorData.error || ''}`;
+            debugLog(errorMessage);
+          }
+        }
+      } catch (apiError) {
+        debugLog(`All API fetch attempts failed: ${apiError.message}`);
+        errorMessage = `API error: ${apiError.message}`;
+      }
+      
+      // If we still have no diff and there's an error, show it
+      if ((!diffText || diffText.trim() === '') && errorMessage) {
+        debugLog(`Error getting diff: ${errorMessage}`);
+        diffContainer.innerHTML = `<div class="error">
+          <h3>Error loading diff</h3>
+          <p>${errorMessage}</p>
+          <button id="retry-button" class="retry-button">Retry</button>
+        </div>`;
+        
+        // Add retry button handler
+        document.getElementById('retry-button')?.addEventListener('click', () => {
+          fetchAndRenderDiff(sha);
+        });
+        
+        return;
+      }
+      
+      // If we have no diff but no error, show no changes found
+      if (!diffText || diffText.trim() === '') {
+        debugLog("Empty diff content received");
+        diffContainer.innerHTML = '<div class="no-diff">No changes found in this commit</div>';
+        return;
+      }
+      
+      // Update progress for starting render phase
+      updateLoadingProgress(3);
+      
+      // Try rendering with available libraries
+      debugLog("Attempting to render diff");
+      
+      // Get diff format preference from localStorage (default to side-by-side)
+      const diffFormat = localStorage.getItem('diffFormat') || 'side-by-side';
+      
+      if (window.Diff2Html && window.Diff2Html.html) {
+        // Try with diff2html
+        try {
+          debugLog(`Using Diff2Html for rendering in ${diffFormat} mode`);
+          const diffHtml = window.Diff2Html.html(diffText, {
+            drawFileList: true,
+            matching: 'lines',
+            outputFormat: diffFormat, // Use the saved format
+            renderNothingWhenEmpty: true,
+            diffStyle: 'word',
+            lineWrapping: true // Enable line wrapping for all modes
+          });
+          
+          diffContainer.innerHTML = diffHtml;
+          debugLog("Diff rendered with Diff2Html");
+          
+          document.querySelectorAll('.d2h-file-wrapper').forEach(file => {
+            file.classList.add('diff-file');
+            
+            // Check if this is a markdown file
+            const filenameEl = file.querySelector('.d2h-file-name');
+            if (!filenameEl) return;
+            
+            const filename = filenameEl.textContent;
+            if (filename && (filename.endsWith('.md') || filename.endsWith('.markdown'))) {
+              debugLog(`Processing markdown file: ${filename}`);
+              file.classList.add('markdown-diff');
+              
+              // Generate a more readable view for non-technical users
+              createReadableMarkdownView(file);
+              
+              // Find diff content areas and enhance them
+              const contentAreas = file.querySelectorAll('.d2h-code-line-ctn');
+              contentAreas.forEach(line => {
+                // Keep the diff indicators (+ and -) visible
+                const prefixEl = line.querySelector('.d2h-code-line-prefix');
+                if (!prefixEl) return;
+                
+                const diffIndicator = prefixEl.textContent.trim();
+                if (diffIndicator === '+' || diffIndicator === '-') {
+                  line.classList.add(diffIndicator === '+' ? 'addition' : 'deletion');
+                  
+                  // Make additions and deletions more prominent
+                  line.style.fontWeight = 'bold';
+                }
+                
+                // Apply basic markdown styling to make it more readable
+                const content = line.querySelector('.d2h-code-line-content');
+                if (content) {
+                  const text = content.textContent || '';
+                  
+                  // Apply styling to headings (##, ###, etc)
+                  if (text.match(/^#{1,6}\s/)) {
+                    content.classList.add('md-heading');
+                    const headingLevel = text.match(/^(#{1,6})\s/)[1].length;
+                    content.style.fontSize = (1.5 - (headingLevel * 0.1)) + 'em';
+                  }
+                  // Add styles for lists (*, -, +)
+                  else if (text.match(/^\s*[\*\-\+]\s/)) {
+                    content.classList.add('md-list-item');
+                  }
+                  // Add styles for code blocks (```)
+                  else if (text.match(/^\s*```/)) {
+                    content.classList.add('md-code-block');
+                  }
+                  // Add styles for bold and italic
+                  else if (text.match(/\*\*.*\*\*/)) {
+                    content.innerHTML = content.innerHTML.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                  }
+                  else if (text.match(/\*.*\*/)) {
+                    content.innerHTML = content.innerHTML.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                  }
+                }
+              });
+            }
+          });
+          
+          // Set up toggle diff mode button
+          const toggleButton = document.getElementById('toggle-diff-mode');
+          if (toggleButton) {
+            toggleButton.addEventListener('click', () => {
+              const currentFormat = localStorage.getItem('diffFormat') || 'side-by-side';
+              const newFormat = currentFormat === 'side-by-side' ? 'line-by-line' : 'side-by-side';
+              localStorage.setItem('diffFormat', newFormat);
+              
+              // Update button text
+              const buttonText = toggleButton.querySelector('.diff-option-text');
+              if (buttonText) {
+                buttonText.textContent = newFormat === 'side-by-side' ? 'Unified View' : 'Side-by-Side';
+              }
+              
+              // Re-render with new format
+              fetchAndRenderDiff(sha);
+            });
+            
+            // Update initial button text
+            const buttonText = toggleButton.querySelector('.diff-option-text');
+            if (buttonText) {
+              buttonText.textContent = diffFormat === 'side-by-side' ? 'Unified View' : 'Side-by-Side';
+            }
+          }
+          
+          // Completed successfully
+          updateLoadingProgress(4);
+          return;
+        } catch (diff2htmlError) {
+          debugLog(`Diff2Html rendering error: ${diff2htmlError.message}`);
+          // Fall through to next renderer
+        }
+      }
+      
+      if (window.SimpleDiff && window.SimpleDiff.render) {
+        // Try with SimpleDiff
+        try {
+          debugLog("Using SimpleDiff for rendering");
+          const diffHtml = window.SimpleDiff.render(diffText);
+          
+          diffContainer.innerHTML = diffHtml;
+          debugLog("Diff rendered with SimpleDiff");
+          
+          // Completed successfully with fallback
+          updateLoadingProgress(4);
+          return;
+        } catch (simpleDiffError) {
+          debugLog(`SimpleDiff rendering error: ${simpleDiffError.message}`);
+          // Fall through to raw diff
+        }
+      }
+      
+      // Fallback to raw diff
+      debugLog("Falling back to raw diff");
+      diffContainer.innerHTML = `<pre class="raw-diff">${diffText}</pre>`;
+      
+      // Completed with raw fallback
+      updateLoadingProgress(4);
+      
+    } catch (error) {
+      console.error('Error rendering diff:', error);
+      debugLog(`Error: ${error.message}`);
+      diffContainer.innerHTML = `<div class="error">
+        <h3>Error loading diff</h3>
+        <p>${error.message}</p>
+        <button id="retry-button" class="retry-button">Retry</button>
+      </div>`;
+      
+      // Add retry button handler
+      document.getElementById('retry-button')?.addEventListener('click', () => {
+        fetchAndRenderDiff(sha);
+      });
+    }
+  }
+
+  // Function to create a more readable view of markdown diffs
+  function createReadableMarkdownView(fileElement) {
+    debugLog('Creating readable markdown view');
+    // Create a button to toggle between code view and readable view
+    const header = fileElement.querySelector('.d2h-file-header');
+    if (!header) {
+      debugLog('No file header found');
+      return;
+    }
+    
+    // Remove any existing toggle buttons
+    const existingButtons = header.querySelectorAll('.toggle-view-button');
+    existingButtons.forEach(btn => btn.remove());
+    
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'toggle-view-button';
+    toggleButton.textContent = 'Show Readable View';
+    header.appendChild(toggleButton);
+    
+    // Generate a more readable view
+    const codeView = fileElement.querySelector('.d2h-file-diff');
+    if (!codeView) {
+      debugLog('No code view found');
+      return;
+    }
+    
+    // Remove any existing readable views
+    const existingViews = fileElement.querySelectorAll('.readable-markdown-view');
+    existingViews.forEach(view => view.remove());
+    
+    // Create a container for the readable view
+    const readableView = document.createElement('div');
+    readableView.className = 'readable-markdown-view';
+    readableView.style.display = 'none'; // Initially hidden
+    
+    // Process added and removed content in a way that maintains context
+    const changes = [];
+    let currentChangeType = null;
+    let currentChangeContent = [];
+    
+    fileElement.querySelectorAll('.d2h-code-line-ctn').forEach(line => {
+      const prefix = line.querySelector('.d2h-code-line-prefix');
+      const content = line.querySelector('.d2h-code-line-content');
+      
+      if (!prefix || !content) return;
+      
+      const indicator = prefix.textContent.trim();
+      const text = content.textContent;
+      
+      // If we find a new change type or there's no indicator, push current group and start new one
+      if ((indicator === '+' || indicator === '-') && indicator !== currentChangeType) {
+        if (currentChangeContent.length > 0) {
+          changes.push({type: currentChangeType, lines: [...currentChangeContent]});
+          currentChangeContent = [];
+        }
+        currentChangeType = indicator;
+        currentChangeContent.push(text);
+      } 
+      // Continue the current group
+      else if (indicator === currentChangeType) {
+        currentChangeContent.push(text);
+      }
+      // If it's a context line (no + or -), push current group and start a new context group
+      else if (indicator !== '+' && indicator !== '-') {
+        if (currentChangeContent.length > 0) {
+          changes.push({type: currentChangeType, lines: [...currentChangeContent]});
+          currentChangeContent = [];
+          currentChangeType = null;
+        }
+      }
+    });
+    
+    // Add the last change group if exists
+    if (currentChangeContent.length > 0) {
+      changes.push({type: currentChangeType, lines: [...currentChangeContent]});
+    }
+    
+    debugLog(`Found ${changes.length} change groups`);
+    
+    // Create readable diff display - only show non-empty sections
+    const additionsExist = changes.some(change => change.type === '+');
+    const removalsExist = changes.some(change => change.type === '-');
+    
+    const diffContent = document.createElement('div');
+    diffContent.className = 'readable-diff-content';
+    
+    // Create a simple summary of changes
+    const changesSummary = document.createElement('div');
+    changesSummary.className = 'changes-summary';
+    changesSummary.innerHTML = `
+      <h2>Changes Summary</h2>
+      <p>This commit ${additionsExist ? 'adds' : ''}${additionsExist && removalsExist ? ' and ' : ''}${removalsExist ? 'removes' : ''} content in this markdown file.</p>
+    `;
+    diffContent.appendChild(changesSummary);
+    
+    // Display the changes in a more user-friendly format
+    const changesDisplay = document.createElement('div');
+    changesDisplay.className = 'changes-display';
+    
+    changes.forEach((change, index) => {
+      if (!change.type) return; // Skip context lines
+      
+      const changeSection = document.createElement('div');
+      changeSection.className = change.type === '+' ? 'added-section' : 'removed-section';
+      
+      const joinedLines = change.lines.join('<br>');
+      const formattedContent = formatMarkdown(joinedLines);
+      
+      changeSection.innerHTML = `
+        <h3 class="diff-section-title">${change.type === '+' ? 'Added' : 'Removed'} Content:</h3>
+        <div class="diff-content ${change.type === '+' ? 'added' : 'removed'}">${formattedContent}</div>
+      `;
+      changesDisplay.appendChild(changeSection);
+    });
+    
+    diffContent.appendChild(changesDisplay);
+    readableView.appendChild(diffContent);
+    
+    // Insert the readable view after the code view
+    codeView.parentNode.insertBefore(readableView, codeView.nextSibling);
+    
+    // Set up toggle functionality
+    toggleButton.addEventListener('click', () => {
+      const isReadableVisible = readableView.style.display !== 'none';
+      readableView.style.display = isReadableVisible ? 'none' : 'block';
+      codeView.style.display = isReadableVisible ? 'block' : 'none';
+      toggleButton.textContent = isReadableVisible ? 'Show Readable View' : 'Show Code View';
+      debugLog(`Toggled view to ${isReadableVisible ? 'code' : 'readable'} view`);
+    });
+  }
+  
+  // Function to format markdown content for the readable view
+  function formatMarkdown(text) {
+    // Process headings (# Heading)
+    let formatted = text.replace(/^(#{1,6})\s+(.+?)$/gm, (match, hashes, heading) => {
+      const level = hashes.length;
+      return `<h${level} class="md-preview-heading">${heading}</h${level}>`;
+    });
+    
+    // Process bold (**bold**)
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Process italic (*italic*)
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Process lists (- item)
+    formatted = formatted.replace(/^(\s*)([\*\-\+])\s+(.+?)$/gm, 
+      (match, space, bullet, content) => `${space}<span class="md-list-item">•</span> ${content}`);
+    
+    // Process code blocks (```)
+    formatted = formatted.replace(/```([^`]+)```/g, 
+      (match, code) => `<pre class="md-code-block">${code}</pre>`);
+    
+    return formatted;
+  }
+  
+  // Add a global debug function
+  window.debugDiffViewer = {
+    forceLoad: (sha) => {
+      debugLog(`Force loading diff for SHA: ${sha || currentSha}`);
+      fetchAndRenderDiff(sha || currentSha);
+    },
+    currentState: () => {
+      debugLog(`Current SHA: ${currentSha}, Owner: ${owner}, Repo: ${repo}`);
+      return { currentSha, owner, repo };
+    }
+  };
+
+  // Initial load if we have a selected commit
+  if (currentSha) {
+    debugLog(`Initial load for SHA: ${currentSha}`);
+    // Use setTimeout to ensure the page has fully loaded
+    setTimeout(() => {
+      fetchAndRenderDiff(currentSha);
+    }, 500);
+  }
+
+  // Listen for commit selection changes
+  debugLog("Adding event listener for loadCommitDiff event");
+  window.addEventListener('loadCommitDiff', (event) => {
+    debugLog(`Received loadCommitDiff event: ${JSON.stringify(event.detail)}`);
+    const { sha } = event.detail;
+    if (sha) {
+      currentSha = sha;
+      fetchAndRenderDiff(sha);
+    } else {
+      debugLog("Event had no SHA");
+    }
+  });
+</script>
+
+<style>
+  .select-commit {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    color: #888;
+    font-size: 1.2rem;
+  }
+
+  .error {
+    color: #e74c3c;
+    padding: 2rem;
+    text-align: center;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    margin: 2rem auto;
+  }
+  
+  .error h3 {
+    margin-bottom: 1rem;
+  }
+  
+  .error p {
+    margin-bottom: 1.5rem;
+  }
+  
+  .retry-button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+  }
+  
+  .retry-button:hover {
+    background-color: #2980b9;
+  }
+  
+  .no-diff {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    color: #888;
+    font-size: 1.2rem;
+  }
+  
+  .diff-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background-color: white;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .current-commit-info {
+    font-size: 1.2rem;
+    margin: 0;
+    padding: 0;
+    color: var(--secondary-color);
+  }
+  
+  .no-commit-selected {
+    font-size: 1.2rem;
+    margin: 0;
+    padding: 0;
+    color: #888;
+    font-style: italic;
+  }
+  
+  .commit-sha {
+    font-family: monospace;
+    padding: 0.2rem 0.4rem;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #eee;
+    color: #555;
+  }
+  
+  .diff-options {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .diff-option-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+  }
+  
+  .diff-option-button:hover {
+    background-color: #f5f5f5;
+  }
+  
+  .loading-indicator {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    color: #888;
+    text-align: center;
+  }
+  
+  .loading-spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-left-color: var(--primary-color);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .loading-text {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+  }
+  
+  .loading-progress {
+    width: 0%;
+    height: 4px;
+    background-color: var(--primary-color);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    max-width: 200px;
+    min-width: 0px;
+    position: relative;
+    text-indent: -9999px;
+    overflow: hidden;
+  }
+  
+  .loading-progress.complete {
+    background-color: #2ecc71;
+  }
+  
+  .debug-info {
+    font-family: monospace;
+    font-size: 12px;
+    color: #666;
+    padding: 10px;
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+  }
+  
+  .raw-diff {
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow: auto;
+    background-color: #f7f7f7;
+    padding: 1rem;
+    border-radius: 4px;
+  }
+
+  /* Markdown diff styling */
+  .markdown-diff {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+
+  .markdown-diff .d2h-code-line-ctn {
+    padding: 4px 0;
+  }
+
+  /* Style for added or removed lines */
+  .markdown-diff .addition {
+    background-color: rgba(45, 170, 45, 0.2);
+    border-left: 3px solid #2daa2d;
+  }
+
+  .markdown-diff .deletion {
+    background-color: rgba(250, 70, 70, 0.2);
+    border-left: 3px solid #fa4646;
+  }
+  
+  /* Readable view styles */
+  .toggle-view-button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-left: 10px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+  }
+
+  .toggle-view-button:hover {
+    background-color: #2980b9;
+  }
+
+  .readable-markdown-view {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    padding: 25px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin: 20px 0;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .readable-diff-content {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  .changes-summary {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .changes-summary h2 {
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    color: #333;
+  }
+
+  .changes-summary p {
+    color: #555;
+    font-size: 1.1em;
+    line-height: 1.5;
+  }
+
+  .changes-display {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+  }
+
+  .diff-section-title {
+    font-size: 1.3em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+  }
+
+  .removed-section .diff-section-title {
+    color: #e74c3c;
+  }
+
+  .added-section .diff-section-title {
+    color: #27ae60;
+  }
+
+  .diff-content {
+    padding: 20px;
+    border-radius: 8px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    font-size: 1.05em;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .diff-content.removed {
+    background-color: #ffecec;
+    border-left: 4px solid #e74c3c;
+  }
+
+  .diff-content.added {
+    background-color: #e6ffed;
+    border-left: 4px solid #27ae60;
+  }
+  
+  /* Markdown preview styles */
+  .md-preview-heading {
+    margin: 0.8em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  
+  h1.md-preview-heading {
+    font-size: 1.8em;
+    color: #333;
+  }
+  
+  h2.md-preview-heading {
+    font-size: 1.5em;
+    color: #444;
+  }
+  
+  h3.md-preview-heading {
+    font-size: 1.3em;
+    color: #555;
+  }
+  
+  h4.md-preview-heading, h5.md-preview-heading, h6.md-preview-heading {
+    font-size: 1.1em;
+    color: #666;
+  }
+  
+  .md-list-item {
+    display: inline-block;
+    width: 1em;
+    margin-right: 0.5em;
+  }
+  
+  .md-code-block {
+    font-family: monospace;
+    background-color: #f6f8fa;
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 4px;
+    font-size: 0.9em;
+    overflow-x: auto;
+  }
+
+  /* Markdown formatting styles */
+  .markdown-diff .md-heading {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-top: 8px;
+  }
+
+  .markdown-diff .md-list-item {
+    padding-left: 8px;
+  }
+
+  .markdown-diff .md-code-block {
+    font-family: monospace;
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  /* Make the diff view easier to read for non-technical users */
+  .markdown-diff .d2h-code-line-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+  
+  /* Fix width for diff containers and ensure proper wrapping */
+  .d2h-file-side-diff {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  .d2h-code-line {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  .d2h-code-side-line {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Ensure table-based diff layouts don't overflow */
+  .d2h-diff-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+  
+  .d2h-code-linenumber {
+    width: 50px !important;
+    min-width: 50px !important;
+    max-width: 50px !important;
+  }
+  
+  /* Better size constraints for the entire diff view */
+  .diff-view {
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  
+  /* Force the diff container to have a fixed width and better layout */
+  .d2h-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Handle side-by-side view specifically */
+  .d2h-file-diff {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  
+  /* For side-by-side view */
+  .d2h-files-diff {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Control individual columns in side-by-side view */
+  td.d2h-code-side-linenumber,
+  td.d2h-code-side-line {
+    word-break: break-word;
+    white-space: pre-wrap;
+    max-width: calc(50% - 25px);
+  }
+  
+  /* Make the overall max width narrower for better readability */
+  .d2h-file-wrapper {
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  /* Ensure the main content container doesn't overflow */
+  #main-content {
+    overflow-x: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix for line-by-line mode */
+  .d2h-code-line-ctn {
+    width: auto !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+</style>

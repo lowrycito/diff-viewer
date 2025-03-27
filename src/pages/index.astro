@@ -1,0 +1,163 @@
+---
+import Layout from '../layouts/Layout.astro';
+import CommitList from '../components/CommitList.astro';
+import DiffViewer from '../components/DiffViewer.astro';
+import { getCommits } from '../utils/github';
+
+// Default to our target repository
+const owner = Astro.url.searchParams.get('owner') || 'lowrycito';
+const repo = Astro.url.searchParams.get('repo') || 'handbook';
+const selectedCommit = Astro.url.searchParams.get('sha');
+
+// Fetch commits
+let commits = [];
+let error = null;
+
+try {
+  if (owner && repo) {
+    commits = await getCommits(owner, repo);
+    // Check if we got any commits
+    if (commits.length === 0) {
+      error = `No commits found in repository ${owner}/${repo}. The repository may be empty or private.`;
+    }
+  }
+} catch (e) {
+  console.error('Error fetching commits:', e);
+  error = e instanceof Error ? e.message : String(e);
+}
+---
+
+<Layout title={`Diff Redline View - ${owner}/${repo}`} owner={owner} repo={repo}>
+  {error && (
+    <div class="error-container">
+      <div class="error-message">
+        <h2>Error Loading Repository</h2>
+        <p>{error}</p>
+        <p>Please check the repository owner and name and try again.</p>
+        <div class="error-suggestions">
+          <h3>Try these popular repositories:</h3>
+          <div class="repo-suggestions" id="repo-suggestion-links">
+            <a href="/?owner=lowrycito&repo=handbook">lowrycito/handbook</a>
+            <a href="/?owner=withastro&repo=astro">withastro/astro</a>
+            <a href="/?owner=facebook&repo=react">facebook/react</a>
+            <a href="/?owner=vuejs&repo=vue">vuejs/vue</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {!error && (
+    <div class="app-container">
+      <CommitList commits={commits} selectedCommit={selectedCommit} />
+      <DiffViewer 
+        selectedCommit={selectedCommit} 
+        owner={owner} 
+        repo={repo} 
+      />
+    </div>
+  )}
+</Layout>
+
+<style>
+  .app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .error-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 2rem;
+  }
+
+  .error-message {
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 600px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+
+  .error-message h2 {
+    color: #e74c3c;
+    margin-bottom: 1rem;
+  }
+  
+  .error-suggestions {
+    margin-top: 2rem;
+    text-align: left;
+  }
+  
+  .error-suggestions h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #555;
+  }
+  
+  .repo-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+  
+  .repo-suggestions a {
+    display: inline-block;
+    padding: 0.6rem 1rem;
+    background-color: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--primary-color);
+    font-family: monospace;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+  
+  .repo-suggestions a:hover {
+    background-color: var(--primary-color);
+    color: white;
+    text-decoration: none;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  @media (max-width: 768px) {
+    .app-container {
+      flex-direction: column;
+    }
+  }
+</style>
+
+<script>
+  // Check if URL has parameters but no content loaded yet
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const sha = params.get('sha');
+    
+    // Update suggestion links to preserve SHA if present
+    if (sha) {
+      // Trigger loading of diff
+      window.dispatchEvent(new CustomEvent('loadCommitDiff', { detail: { sha } }));
+      
+      // Set active class on selected commit
+      const commitItem = document.querySelector(`.commit-item[data-sha="${sha}"]`);
+      if (commitItem) {
+        commitItem.classList.add('active');
+      }
+      
+      // Update suggestion links to preserve the SHA
+      const suggestionLinks = document.querySelectorAll('#repo-suggestion-links a');
+      suggestionLinks.forEach(link => {
+        const url = new URL(link.href);
+        url.searchParams.set('sha', sha);
+        link.href = url.toString();
+      });
+    }
+  });
+</script>
