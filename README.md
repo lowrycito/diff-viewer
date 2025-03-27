@@ -1,4 +1,4 @@
-# Handbook Redline - Git Diff Viewer
+# Diff Redline - Git Diff Viewer
 
 A simple web application that allows users to select commits from a GitHub repository and view diffs in a redline (side-by-side) view. This tool is designed to be easy for attorneys and non-technical users to review changes to documents in a repository.
 
@@ -55,7 +55,7 @@ The application has a responsive layout with:
 2. Install dependencies:
 
 ```bash
-cd handbook-viewer
+cd diff-viewer
 npm install
 ```
 
