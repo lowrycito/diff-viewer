@@ -13,34 +13,44 @@ permissions:
   pages: write
   id-token: write
 
+# Set environment variables available to all jobs and steps
+env:
+  BUILD_PATH: "." # default value when not using subfolders
+  PUBLIC_PATH: "/diff-viewer" # trailing slash required
+
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout your repository using git
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Install Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: 'npm'
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v4
       - name: Install dependencies
         run: npm ci
-      - name: Build
-        run: npm run build
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      - name: Build with Astro
+        run: |
+          npm run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: ./dist
 
   deploy:
-    needs: build
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    name: Deploy
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
